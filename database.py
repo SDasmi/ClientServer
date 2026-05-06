@@ -26,7 +26,6 @@ def setup_db():
 
     print("Users принялись за осбуждение шаурмы и Бритни Спирс!")
 
-
 #Добавим пользователя
 def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str):
     h_pwd = hash_pwd(pwd)
@@ -48,6 +47,7 @@ def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str):
 
 #Проверка юзера 
 def authenticate_user(username: str, raw_pwd: str)->bool:
+
     conn = sqlite3.connect('users.db')
     cursor=conn.cursor()
  
@@ -67,12 +67,35 @@ def authenticate_user(username: str, raw_pwd: str)->bool:
 
     #Проверяем пароль
     if verify_pwd(raw_pwd, st_hash):
-        print(f"Пользователь {username} приступите к вашей шаурме!")
+        print(f"Пользователь {username}, приступите к вашей шаурме!")
         return True
     else:
         print(f"Неправильный пароль, Give me baby one more time!")
         return False
     
+def delete_user(username: str, raw_pwd: str) -> bool:
+    #А был ли мальчик?
+    if not authenticate_user(username, raw_pwd):
+        return False
+    
+    conn=sqlite3.connect("users.db")
+    cursor=conn.cursor()
+
+    try:
+        cursor.execute('''
+        delete from users where username = ?
+                   ''',(username, ))
+        conn.commit()
+        print(f"Пользователь {username} удален! Mama I'm in love with a criminal")
+        return True
+    except Exception as e:
+        print(f"Возникла ошибка {e}")
+        return False 
+    finally:
+        conn.close()
+
+    
+
 
 
 
