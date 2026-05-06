@@ -46,6 +46,45 @@ def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str):
     finally:
         conn.close()
 
+#Проверка юзера 
+def authenticate_user(username: str, raw_pwd: str)->bool:
+    conn = sqlite3.connect('users.db')
+    cursor=conn.cursor()
+ 
+    #Ищем пользователя
+    cursor.execute(''' select password_hash from users where username = ?
+            ''', (username, ))
+    #достаем один 
+    result = cursor.fetchone()
+    conn.close()
+
+    #Если не нашли 
+    if not result:
+        print("Пользователь-шаурмалюб не найден!")
+        return False
+    
+    st_hash=result[0]
+
+    #Проверяем пароль
+    if verify_pwd(raw_pwd, st_hash):
+        print(f"Пользователь {username} приступите к вашей шаурме!")
+        return True
+    else:
+        print(f"Неправильный пароль, Give me baby one more time!")
+        return False
+    
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
