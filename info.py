@@ -32,4 +32,39 @@ def get_info(username: str, raw_pwd: str, num: int) ->str:
 
     return "Шаурмалюб не найден("
 
+def update_info(username: str, raw_pwd: str, field: str, new_info: str):
+    if not authenticate_user(username, raw_pwd):
+        print(f"Пользователь {username} не найден!")
+        return
+    
+    #Пароли и Нэйм будет в другой функции
+    allowed_fields = ['favorite_shawarma', 'secret_recipe', 'favorite_song_of_britney']
+    
+    if field not in allowed_fields:
+        print(f"Ошибочка: Поле '{field}' не меняется таким темным путем")
+        return 
+    
+    #Подключение
+    conn=sqlite3.connect('users.db')
+    cursor=conn.cursor()
+
+
+    try:
+    #Изменение 
+
+        cursor.execute(f'''update users set {field} = ? where username =? ''', 
+                   (new_info, username))
+
+        conn.commit()
+        print(f"{field} успешно обновлено на {new_info}!")
+        return 
+    
+    except Exception as e:
+        print(f"Ошибочка вышла: Что-то пошло не так ... {e}")
+        return
+    
+
+    finally: 
+        conn.close()
+
 
