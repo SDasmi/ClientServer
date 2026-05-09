@@ -63,7 +63,6 @@ def update_info(username: str, raw_pwd: str, field: str, new_info: str):
         print(f"Ошибочка вышла: Что-то пошло не так ... {e}")
         return
     
-
     finally: 
         conn.close()
 
