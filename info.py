@@ -66,4 +66,29 @@ def update_info(username: str, raw_pwd: str, field: str, new_info: str):
     finally: 
         conn.close()
 
+def change_pwd(username: str)-> bool:
+    #Сперва еще разок проверим, можно ли поменять 
+    pwd = input("Введите старый пароль")
+    if not authenticate_user(username, pwd):
+        print("Неправильный пароль!")
+        return False
+    else:
+        #Меняем и лезем в бд
+        new_pwd = input("Введите новый пароль!")
+        new_hash= hash_pwd(new_pwd)
+
+        conn=sqlite3.connect('users.db')
+        cursor=conn.cursor()
+
+        cursor.execute('''
+        update users set password_hash = ? where username = ?
+        ''', (new_hash, username)) 
+
+        conn.commit()
+        conn.close()
+        return True 
+    
+    
+    
+
 

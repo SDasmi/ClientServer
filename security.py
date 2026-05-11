@@ -15,4 +15,3 @@ def verify_pwd(inserted_pwd: str, stored_hash: str) -> bool:
 
 
 
-
