@@ -22,13 +22,13 @@ def get_info(username: str, raw_pwd: str, num: int) ->str:
         favorite_shawarma, secret_recipe, favorite_song_of_britney = row 
         match num:
             case 1:
-                print(f"Et voila! Любимая шаурмулечка это - {favorite_shawarma}")
+                return f"Et voila! Любимая шаурмулечка это - {favorite_shawarma}"
             case 2: 
-                print (f"Потаённый рецепт: {secret_recipe}")
+                return f"Потаённый рецепт: {secret_recipe}"
             case 3:
-                print (f"Вездесущая Бритни и любимый ее хит - {favorite_song_of_britney}")
+                return f"Вездесущая Бритни и любимый ее хит - {favorite_song_of_britney}"
             case _:
-                print("Сударыня, вы зашли не в тот переулок!")
+                return "Сударыня, вы зашли не в тот переулок!"
 
     return "Шаурмалюб не найден("
 
@@ -87,7 +87,6 @@ def change_pwd(username: str)-> bool:
         conn.commit()
         conn.close()
         return True 
-    
     
     
 

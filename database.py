@@ -6,8 +6,11 @@ def create_connection():
     return sqlite3.connect('users.db')
 
 #Если у нас нет до сих пор таблицы пользователей, создадим ее 
+
 def setup_db():
-    connection = create_connection()
+
+    connection = new_func()
+    
     cursor= connection.cursor()
 
     cursor.execute( '''
@@ -17,14 +20,16 @@ def setup_db():
         password_hash text not null,
         favorite_shawarma text not null, 
         secret_recipe text not null,
-        favorite_song_of_britney text not null)
-'''
+        favorite_song_of_britney text not null
+        )'''
     )
 
     connection.commit()
     connection.close()
 
-    print("Users принялись за осбуждение шаурмы и Бритни Спирс!")
+def new_func():
+    connection =create_connection()
+    return connection
 
 #Добавим пользователя
 def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str):
@@ -73,6 +78,7 @@ def authenticate_user(username: str, raw_pwd: str)->bool:
         print(f"Неправильный пароль, Give me baby one more time!")
         return False
     
+
 def delete_user(username: str, raw_pwd: str) -> bool:
     #А был ли мальчик?
     if not authenticate_user(username, raw_pwd):
@@ -94,15 +100,12 @@ def delete_user(username: str, raw_pwd: str) -> bool:
     finally:
         conn.close()
 
+
+
+   
+
     
-
-
-
-
-
-
-
-
+    
 
 
 

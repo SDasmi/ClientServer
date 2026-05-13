@@ -13,6 +13,7 @@ def encrypt_data(data, key):
         data=data.encode('utf-8') #превращаем в токен
     return Fernet(key).encrypt(data)
 
+
 #FERNET еще + дата + HMAC - проверка целостности 
 def decrypt_data(data, key):
     return Fernet(key).decrypt(data)
@@ -27,6 +28,3 @@ def unpack_lenght(data):
 
 #число обязательно 4 байта
 # >I left->right unsigned INT
-
-    
-
