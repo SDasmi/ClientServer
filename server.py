@@ -1,12 +1,5 @@
-import socket 
-import threading
-import os
-import encryption
-import database
-import struct
-import time
-import files
-import sqlite3
+import socket, threading, os, encryption, database, struct, time, files, info
+
 HOST ='127.0.0.1'
 PORT = 61415
 
@@ -41,28 +34,17 @@ def handle_client(conn, addr, key):
             while True:
                 command = conn.recv(1024).decode('utf-8')
                 match command:
-                    
+                   
                     case "UPLOAD":
                         server_file_upload(username, conn, key)
                         conn.send("FILE_RECEIVED_OK".encode('utf-8'))
+                    
                     case "GET_INFO":
-                        conn.recv
+                        case_get_info(conn, username, pwd, key)
+                 
                     case "SHOW_FILES":
-                        try:
-                            rows = files.show_files(username, key) # Убедись, что функция есть
-                            if not rows:
-                                conn.sendall("ALL".encode())
-                            else:
-                                for row in rows:
-                                    # row[0] - имя, row[1] - дата, row[2] - размер
-                                    file_info = f"{row[0]} | Размер: {row[1]} байт"
-                                    encrypted_row = encryption.encrypt_data(file_info, key)
-                                    conn.sendall(encrypted_row)
-                                    time.sleep(0.1) 
-                                conn.sendall("ALL".encode())
-                                print(f"[+] Список файлов для {username} отправлен")
-                        except Exception as e:
-                            print(f"Ошибка при выводе файлов: {e}")
+                        show_files(conn, username, key)
+                   
                     case "EXIT":
                         break
         
@@ -79,6 +61,13 @@ def handle_client(conn, addr, key):
         conn.send("CLOSE".encode())
         conn.close()
         print(f"[-] Подключение по {addr} закрыто")
+
+
+
+
+
+
+
       
 def start_server(): 
     database.setup_db()
@@ -132,6 +121,37 @@ def server_file_upload(username, conn, key):
     files.add_file(username, filename, file_size)
     print(f"[+] Файл {filename} успешно загружен")
 
+###Разгребем кейсы на функции 
+
+
+
+
+
+
+
+
+def case_get_info(conn, username, pwd, key):
+    numg =  int(conn.recv(1024).decode())
+    dataa=info.get_info(username, pwd, numg)
+    conn.sendall(encryption.encrypt_data(dataa, key))
+    print(f"[+]Информация {username} послана")
+
+def show_files(conn, username, key):
+    try:
+        rows = files.show_files(username, key) # Убедись, что функция есть
+        if not rows:
+            conn.sendall("ALL".encode())
+        else:
+            for row in rows:
+                # row[0] - имя, row[1] - дата, row[2] - размер
+                file_info = f"{row[0]} | Размер: {row[1]} байт"
+                encrypted_row = encryption.encrypt_data(file_info, key)
+                conn.sendall(encrypted_row)
+                time.sleep(0.1) 
+            conn.sendall("ALL".encode())
+            print(f"[+] Список файлов для {username} отправлен")
+    except Exception as e:
+        print(f"Ошибка при выводе файлов: {e}")
 
 
 
