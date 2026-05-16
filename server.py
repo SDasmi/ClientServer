@@ -13,45 +13,79 @@ def handle_client(conn, addr, key):
     print(f"[+] Новое подключение {addr}")
     conn.sendall(key)
 
+    ##Аутентификация/ добавление юзера
     try:
-    #Аутентефикация (забираем 1КБ)
+  
+        client_choice = conn.recv(1024).decode('utf-8')
         
-        auth_data = conn.recv(1024).decode('utf-8')
-        if ':' not in auth_data:
-            conn.send("Неправильный формат, нет :".encode('utf-8'))
-            return 
-        
-        username, pwd = auth_data.split(':')
+        if client_choice == "USER_YES":
+            auth_data = encryption.decrypt_data(conn.recv(1024), key).decode()
+            if ':' not in auth_data:
+                print("Неправильный формат, нет :")
+                return 
+            
+            username, pwd = auth_data.split(':')
+  
+            if database.authenticate_user(username, pwd):
+                print(f'Пользователь {username} подключился к серверу')
+                conn.send(f"A_OK".encode('utf-8')) 
+            else:
+                print(f"[-] Пользователь {username} ввел неверный пароль")
+                conn.send(f"A_FAIL".encode('utf-8'))
+                return
+        else:
+            ## Добавляем юзера
+            b = 0
+            while b != 4:
+                username = encryption.decrypt_data(conn.recv(1024), key).decode()
+                time.sleep(0.1)
+                pwd = encryption.decrypt_data(conn.recv(1024), key).decode()
+                time.sleep(0.1)
+                info_data = encryption.decrypt_data(conn.recv(1024), key).decode()
+                
+                if ':' not in info_data:
+                    print("Неправильный формат, нет :")
+                    return 
+                
+                shaurama, recept, fav_song = info_data.split(':')
+                if database.add_user(username, pwd, shaurama, recept, fav_song):
+                    conn.send("AUTH_OK".encode())
+                    b = 4
+                else:
+                    conn.send("NOT_OK".encode())
+                    return
 
-    #ЛОгин пароль 
-        if database.authenticate_user(username, pwd):
-            print(f'Пользователь {username} подключился к серверу')
-            conn.send(f"A_OK".encode('utf-8'))
-        
+            # После успешной регистрации сервер провалится вниз 
+            # в цикл 'while True' и будет ждать команд, как и клиент
+
     #блок принятия команд  
        ########################################################################################
 
-            while True:
-                command = conn.recv(1024).decode('utf-8')
-                match command:
-                   
-                    case "UPLOAD":
-                        server_file_upload(username, conn, key)
-                        conn.send("FILE_RECEIVED_OK".encode('utf-8'))
+        while True:
+            command = conn.recv(1024).decode('utf-8')
+            match command:
+                
+                case "UPLOAD":
+                    server_file_upload(username, conn, key)
+                    conn.send("FILE_RECEIVED_OK".encode('utf-8'))
+                
+                case "GET_INFO":
+                    case_get_info(conn, username, pwd, key)
+
+                case "CHANGE_PWD":
+                    case_change_pwd(conn, username, key)
+
+                case "CHANGE_INFO":
+                    case_change_info(conn, username, key)
                     
-                    case "GET_INFO":
-                        case_get_info(conn, username, pwd, key)
-                 
-                    case "SHOW_FILES":
-                        show_files(conn, username, key)
-                   
-                    case "EXIT":
-                        break
+                case "SHOW_FILES":
+                    show_files(conn, username, key)
         
+                case "EXIT":
+                    break
+    
         ###################################################################################        
-        else:
-            print(f"[-] Пользователь {username} ввел неверный пароль")
-            conn.send(f"A_FAIL".encode('utf-8'))
+       
 
     except Exception as e:
         print(f"[-] Произошла ошибка {e} у {username}")
@@ -126,10 +160,6 @@ def server_file_upload(username, conn, key):
 
 
 
-
-
-
-
 def case_get_info(conn, username, pwd, key):
     numg =  int(conn.recv(1024).decode())
     dataa=info.get_info(username, pwd, numg)
@@ -153,10 +183,25 @@ def show_files(conn, username, key):
     except Exception as e:
         print(f"Ошибка при выводе файлов: {e}")
 
+def case_change_pwd(conn, username, key):
+    conn.sendall("OLD_PWD".encode())
+    old_pwd = (encryption.decrypt_data(conn.recv(1024), key)).decode()
+    if database.authenticate_user(username, old_pwd):
+        print("Cont")
+        conn.send("OK".encode())
+        new_pwd = (encryption.decrypt_data(conn.recv(1024), key)).decode()
+        if info.change_pwd(username, new_pwd):
+            conn.send("OK".encode())
+        
+def case_change_info(conn, username, key):
+    num = conn.recv(1024).decode()
+    time.sleep(1)
+    new_info = (encryption.decrypt_data(conn.recv(1024), key)).decode()
 
-
-
-if __name__=="__main__":
-
+    if info.update_info(username, num, new_info):
+        conn.send("OK".encode())
+    else: 
+        conn.send("NOK".encode())
+if __name__ == "__main__":
     start_server()
         

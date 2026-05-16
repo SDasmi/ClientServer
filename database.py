@@ -45,8 +45,10 @@ def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str):
         ''', (username, h_pwd, shawarma, recipe, song))
         conn.commit()
         print(f"The user {username} has been successfully added to the db")
+        return True
     except sqlite3.IntegrityError:
         print(f"The user with this name {username} already exists")
+        return False
     finally:
         conn.close()
 

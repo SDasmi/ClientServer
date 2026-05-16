@@ -32,17 +32,16 @@ def get_info(username: str, raw_pwd: str, num: int) ->str:
 
     return "Шаурмалюб не найден("
 
-def update_info(username: str, raw_pwd: str, field: str, new_info: str):
-    if not authenticate_user(username, raw_pwd):
-        print(f"Пользователь {username} не найден!")
-        return
+def update_info(username: str, num: str, new_info: str):
     
     #Пароли и Нэйм будет в другой функции
     allowed_fields = ['favorite_shawarma', 'secret_recipe', 'favorite_song_of_britney']
-    
+    hol = int(num)
+    field = allowed_fields[hol - 1] 
+
     if field not in allowed_fields:
-        print(f"Ошибочка: Поле '{field}' не меняется таким темным путем")
-        return 
+        print(f"[-]Ошибочка: Поле '{field}' не меняется таким темным путем")
+        return False
     
     #Подключение
     conn=sqlite3.connect('users.db')
@@ -56,38 +55,37 @@ def update_info(username: str, raw_pwd: str, field: str, new_info: str):
                    (new_info, username))
 
         conn.commit()
-        print(f"{field} успешно обновлено на {new_info}!")
-        return 
+        print(f"[+]{field} успешно обновлено на {new_info}!")
+        return True
     
     except Exception as e:
-        print(f"Ошибочка вышла: Что-то пошло не так ... {e}")
-        return
+        print(f"[-]Ошибочка вышла: Что-то пошло не так ... {e}")
+        return False
     
     finally: 
         conn.close()
 
-def change_pwd(username: str)-> bool:
-    #Сперва еще разок проверим, можно ли поменять 
-    pwd = input("Введите старый пароль")
-    if not authenticate_user(username, pwd):
-        print("Неправильный пароль!")
-        return False
-    else:
-        #Меняем и лезем в бд
-        new_pwd = input("Введите новый пароль!")
-        new_hash= hash_pwd(new_pwd)
+def change_pwd(username: str, new_pwd)-> bool:
 
-        conn=sqlite3.connect('users.db')
-        cursor=conn.cursor()
+    new_hash= hash_pwd(new_pwd)
+
+    conn=sqlite3.connect('users.db')
+    cursor=conn.cursor()
+    try:
 
         cursor.execute('''
         update users set password_hash = ? where username = ?
-        ''', (new_hash, username)) 
-
+        ''', (new_hash, username))   
         conn.commit()
-        conn.close()
+        print(f"[+]Пароль для шаурмолюба {username} успешно изменен")
         return True 
-    
+    except Exception as e:
+        print(f"[-]Произошла ошибка {e}")
+        return False
+    finally:
+        conn.close()
+   
+
     
 
 
