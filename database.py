@@ -20,7 +20,8 @@ def setup_db():
         password_hash text not null,
         favorite_shawarma text not null, 
         secret_recipe text not null,
-        favorite_song_of_britney text not null
+        favorite_song_of_britney text not null,
+        otp_secret text default null
         )'''
     )
 
@@ -32,25 +33,41 @@ def new_func():
     return connection
 
 #Добавим пользователя
-def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str):
+def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str, otp_secret: str):
+    """Теперь принимает otp_secret на вход и сохраняет всё ОДНИМ запросом"""
     h_pwd = hash_pwd(pwd)
+    conn = create_connection()
+    cursor = conn.cursor()
 
-    conn = create_connection() #объект соединения 
-    cursor = conn.cursor() #О, Вергилий 
-
-#Само добавление 
     try:
-        cursor.execute(''' insert into users (username, password_hash, favorite_shawarma, secret_recipe, favorite_song_of_britney)
-        values (?, ?, ?, ?, ?)
-        ''', (username, h_pwd, shawarma, recipe, song))
+        cursor.execute(''' 
+        INSERT INTO users (username, password_hash, favorite_shawarma, secret_recipe, favorite_song_of_britney, otp_secret)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''', (username, h_pwd, shawarma, recipe, song, otp_secret))
         conn.commit()
-        print(f"The user {username} has been successfully added to the db")
         return True
     except sqlite3.IntegrityError:
-        print(f"The user with this name {username} already exists")
+        print(f"[-] Пользователь с именем {username} уже существует.")
         return False
     finally:
         conn.close()
+
+def get_otp_secret(username: str) -> str:
+    """Удобный метод для сервера, чтобы быстро узнать секрет пользователя при логине"""
+    conn = create_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT otp_secret FROM users WHERE username = ?", (username,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+def delete_user_by_username(username: str):
+    """Метод для отката регистрации, если пользователь ввел неверный проверочный код 2FA"""
+    conn = create_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+    conn.commit()
+    conn.close()
 
 #Проверка юзера 
 def authenticate_user(username: str, raw_pwd: str)->bool:

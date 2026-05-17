@@ -1,4 +1,4 @@
-import socket, encryption, time
+import socket, encryption, time, os
 
 def start_client():
     
@@ -14,62 +14,89 @@ def start_client():
             resp = ""
 
             if choice == "1": 
-                s.send("USER_YES".encode())
-                username = input("Логин: ")
-                pwd = input("Пароль: ") 
+                s.sendall("USER_YES".encode())
+                username = input("Логин: ").strip()
+                pwd = input("Пароль: ").strip() 
                 auth_data = f"{username}:{pwd}"
+                time.sleep(0.1)
                 s.sendall(encryption.encrypt_data(auth_data, key))
                 
-                # Ждем ответ от сервера ТОЛЬКО при авторизации
                 resp = s.recv(1024).decode()
+                
+                if resp == "REQ_2FA":
+                    otp_code = input("Введите 6-значный код из вашего приложения 2FA: ").strip()
+                    s.sendall(encryption.encrypt_data(otp_code, key))
+                    resp = s.recv(1024).decode()
+                
                 if resp == "A_OK":
-                    print("Добро пожаловать!")
+                    print("[+] Добро пожаловать!")
+                else:
+                    print("[-] Ошибка авторизации (неверный пароль или код 2FA)!")
+                    return
             else: 
                 add_useeer(s, key)
                 
-                # Исправили .encode() на .decode()
-                server_status = s.recv(1024).decode()
-                if server_status == "AUTH_OK":
-                    print("Пользователь успешно добавлен!")
-                    resp = "A_OK" # Имитируем успех, чтобы пройти в меню команд
+                resp_2fa = s.recv(1024).decode()
+                if resp_2fa.startswith("REG_2FA:"):
+                    secret_key = resp_2fa.split(":", 1)[1]
+                    print("\n" + "="*50)
+                    print("[+] Сгенерирован  ключ 2FA")
+                    print(f"Ваш секретный код: {secret_key}")
+                    print("Добавьте его в Google Authenticator")
+                    print("*"*50 + "\n")
+                    
+                    verify_code = input("Введите текущий 6-значный код из приложения для подтверждения: ").strip()
+                    s.sendall(encryption.encrypt_data(verify_code, key))
+                    
+                    server_status = s.recv(1024).decode()
+                    if server_status == "AUTH_OK":
+                        print("[+] Пользователь успешно добавлен, защита 2FA активирована!")
+                        resp = "A_OK"
+                    else:
+                        print("[-] Ошибка регистрации! Неверный 2FA.")
+                        return
                 else:
-                    print("Попробуйте другой логин!")
-                    return # Или обработай возврат к началу
+                    print("[-] Ошибка регистрации на сервере.")
+                    return
+                
 
             # Пере переходом к командам проверяем статус
         
 #############################################################################
-            while True:
-                command = input('''
-            ВЫБОР КОММАНД:
-            1 Отправить файл
-            2 Вывести данные пользователя
-            3 Сменить пароль
-            4 Изменить данные пользователя
-            5 Вывести весь список доступных вам файлов   
-            6 Скачать файлы с сервера         
-            8 Выйти      
-                ''')
-                
-                match command:
-                    case "1":
-                        case_send_file(s, key)
+            if resp == "A_OK":
+                while True:
+                    command = input('''
+                ВЫБОР КОММАНД:
+                1 Отправить файл
+                2 Вывести данные пользователя
+                3 Сменить пароль
+                4 Изменить данные пользователя
+                5 Вывести весь список доступных вам файлов   
+                6 Скачать файлы с сервера         
+                7 Выйти      
+                    ''')
+                    
+                    match command:
+                        case "1":
+                            case_send_file(s, key)
 
-                    case "2":
-                        case_get_info_sender(s, key)
+                        case "2":
+                            case_get_info_sender(s, key)
 
-                    case "3":
-                        case_change_pwd(s, username, key)
+                        case "3":
+                            case_change_pwd(s, username, key)
 
-                    case "4":
-                        case_change_info(s, username, key)
+                        case "4":
+                            case_change_info(s, username, key)
 
-                    case "5":
-                        case_show_files(s,username, key)
+                        case "5":
+                            case_show_files(s,username, key)
+                        case "6":
+                            download_file(s, key)
 
-                    case "6":
-                        case_exit(s)
-                        break
+                        case "7":
+                            case_exit(s)
+                            break
 
                             
         except ConnectionRefusedError:
@@ -173,16 +200,16 @@ def case_exit(s):
 def add_useeer(s, key):
     s.send("USER_NO".encode())
     print("Введите данные о новом пользователе: ")
-    username = input("Логин: ")
+    username = input("Логин: ").strip()
     while not username:
         print("ВВЕДИТЕ ПАРУ СИМВОЛОВ")
-        username = input("Логин: ")
+        username = input("Логин: ").strip()
     s.send(encryption.encrypt_data(username, key))
 
-    pwd = input("Пароль: ")
+    pwd = input("Пароль: ").strip()
     while not pwd:
         print("ВВЕДИТЕ ПАРУ СИМВОЛОВ")
-        pwd = input("Пароль: ")
+        pwd = input("Пароль: ").strip()
     s.send(encryption.encrypt_data(pwd, key))
 
     ##Сразу запросим информацию 
@@ -212,6 +239,64 @@ def send_file(s,filename, key):
 
     print(f"Файл {filename} отправлен")
 
+
+def download_file(s, key):
+   
+    filename = input("Введите имя файла, который хотите скачать: ").strip()
+    if not filename:
+        print("[-] Имя файла не может быть пустым.")
+        return
+
+    try:
+       
+        s.sendall("DOWNLOAD".encode())
+        time.sleep(0.1)
+
+
+        encrypted_filename = encryption.encrypt_data(filename, key)
+        s.sendall(encrypted_filename)
+
+        
+
+
+        if s.recv(1024).decode() == "FILE_EXISTS":
+            
+            length_bytes = s.recv(4)
+            if not length_bytes:
+                print("[-] Не удалось получить размер файла.")
+                return
+            
+            content_length = encryption.unpack_lenght(length_bytes)
+
+           
+            encrypted_file_data = b""
+            while len(encrypted_file_data) < content_length:
+                packet = s.recv(min(content_length - len(encrypted_file_data), 4096))
+                if not packet:
+                    break
+                encrypted_file_data += packet
+
+            
+            decrypted_file_data = encryption.decrypt_data(encrypted_file_data, key)
+
+        
+            save_dir = input("Введите папку для сохранения (нажмите Enter для текущей папки): ").strip()
+            if save_dir:
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                filepath = os.path.join(save_dir, filename)
+            else:
+                filepath = filename
+
+            with open(filepath, 'wb') as f:
+                f.write(decrypted_file_data)
+                
+            print(f"[+] Файл успешно скачан и сохранен как: {filepath}")
+        else:
+            print("[-] Сервер сообщил, что файл не найден.")
+            
+    except Exception as e:
+        print(f"[-] Ошибка при скачивании файла: {e}")
 if __name__=="__main__":
 
     start_client()

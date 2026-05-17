@@ -1,5 +1,5 @@
-import socket, threading, os, encryption, database, struct, time, files, info
-
+import socket, threading, os, encryption, database, struct, time, files, info, random, base64, hmac
+import hashlib
 HOST ='127.0.0.1'
 PORT = 61415
 
@@ -12,52 +12,79 @@ if not os.path.exists(STORAGE_DIR):
 def handle_client(conn, addr, key):
     print(f"[+] Новое подключение {addr}")
     conn.sendall(key)
-
+    username = None
     ##Аутентификация/ добавление юзера
     try:
-  
         client_choice = conn.recv(1024).decode('utf-8')
         
+       
         if client_choice == "USER_YES":
             auth_data = encryption.decrypt_data(conn.recv(1024), key).decode()
-            if ':' not in auth_data:
-                print("Неправильный формат, нет :")
-                return 
+            if ':' not in auth_data: return 
             
             username, pwd = auth_data.split(':')
-  
             if database.authenticate_user(username, pwd):
-                print(f'Пользователь {username} подключился к серверу')
-                conn.send(f"A_OK".encode('utf-8')) 
+                
+                # КРАСИВО: Запрашиваем секрет через метод database.py, без прямого SQL-кода тут
+                otp_secret = database.get_otp_secret(username)
+                
+                if otp_secret:
+                    conn.sendall("REQ_2FA".encode()) # Просим ввести код 2FA
+                    client_code = encryption.decrypt_data(conn.recv(1024), key).decode()
+                    
+                    current_interval = int(time.time() // 30)
+                    valid_codes = [
+                        verify_totp(otp_secret, current_interval),
+                        verify_totp(otp_secret, current_interval - 1),
+                        verify_totp(otp_secret, current_interval + 1)
+                    ]
+                    
+                    if client_code in valid_codes:
+                        print(f"[+] {username} успешно подтвердил сессию кодом 2FA")
+                        conn.sendall("A_OK".encode('utf-8'))
+                    else:
+                        print(f"[-] {username} провалил проверку 2FA-кода")
+                        conn.sendall("A_FAIL".encode('utf-8'))
+                        return
+                else:
+                    conn.sendall("A_OK".encode('utf-8')) 
             else:
                 print(f"[-] Пользователь {username} ввел неверный пароль")
-                conn.send(f"A_FAIL".encode('utf-8'))
+                conn.sendall("A_FAIL".encode('utf-8'))
                 return
+                
+        # --- СЦЕНАРИЙ РЕГИСТРАЦИИ С ИНИЦИАЛИЗАЦИЕЙ 2FA ---
         else:
-            ## Добавляем юзера
-            b = 0
-            while b != 4:
-                username = encryption.decrypt_data(conn.recv(1024), key).decode()
-                time.sleep(0.1)
-                pwd = encryption.decrypt_data(conn.recv(1024), key).decode()
-                time.sleep(0.1)
-                info_data = encryption.decrypt_data(conn.recv(1024), key).decode()
+            user = encryption.decrypt_data(conn.recv(1024), key).decode()
+            pwd = encryption.decrypt_data(conn.recv(1024), key).decode()
+            info_data = encryption.decrypt_data(conn.recv(1024), key).decode()
+            
+            shaurma, recipe, song = info_data.split(':')
+            
+            # ЭФФЕКТИВНО: Генерируем новый секрет СРАЗУ до внесения в базу
+            otp_secret = generate_totp_secret()
+            
+            # Передаем секрет в add_user, сохраняя всё одним махом
+            if database.add_user(user, pwd, shaurma, recipe, song, otp_secret):
                 
-                if ':' not in info_data:
-                    print("Неправильный формат, нет :")
-                    return 
+                # Отправляем секрет клиенту для привязки в приложении
+                conn.sendall(f"REG_2FA:{otp_secret}".encode())
                 
-                shaurama, recept, fav_song = info_data.split(':')
-                if database.add_user(username, pwd, shaurama, recept, fav_song):
-                    conn.send("AUTH_OK".encode())
-                    b = 4
+                # Проверяем, что пользователь успешно настроил приложение
+                verify_code = encryption.decrypt_data(conn.recv(1024), key).decode()
+                current_interval = int(time.time() // 30)
+                
+                if verify_code == verify_totp(otp_secret, current_interval):
+                    username = user
+                    conn.sendall("AUTH_OK".encode())
                 else:
-                    conn.send("NOT_OK".encode())
+                    # Если первый код не подошел, вызываем метод удаления из database.py
+                    database.delete_user_by_username(user)
+                    conn.sendall("AUTH_FAIL".encode())
                     return
-
-            # После успешной регистрации сервер провалится вниз 
-            # в цикл 'while True' и будет ждать команд, как и клиент
-
+            else:
+                conn.sendall("AUTH_FAIL".encode())
+                return
     #блок принятия команд  
        ########################################################################################
 
@@ -77,6 +104,9 @@ def handle_client(conn, addr, key):
 
                 case "CHANGE_INFO":
                     case_change_info(conn, username, key)
+
+                case "DOWNLOAD":
+                    case_download(conn, username, key)
                     
                 case "SHOW_FILES":
                     show_files(conn, username, key)
@@ -97,12 +127,6 @@ def handle_client(conn, addr, key):
         print(f"[-] Подключение по {addr} закрыто")
 
 
-
-
-
-
-
-      
 def start_server(): 
     database.setup_db()
     files.setup_db_files()
@@ -158,8 +182,6 @@ def server_file_upload(username, conn, key):
 ###Разгребем кейсы на функции 
 
 
-
-
 def case_get_info(conn, username, pwd, key):
     numg =  int(conn.recv(1024).decode())
     dataa=info.get_info(username, pwd, numg)
@@ -193,6 +215,41 @@ def case_change_pwd(conn, username, key):
         if info.change_pwd(username, new_pwd):
             conn.send("OK".encode())
         
+def case_download(conn, username, key):
+    try:
+       
+        encrypted_filename = conn.recv(1024)
+        if not encrypted_filename: return
+        filename = encryption.decrypt_data(encrypted_filename, key).decode()
+        
+        filename = os.path.basename(filename)
+        filepath = os.path.join(STORAGE_DIR, filename)
+        
+        
+        if os.path.exists(filepath) and os.path.isfile(filepath):
+            conn.sendall("FILE_EXISTS".encode())
+            time.sleep(0.1)
+            
+            with open(filepath, 'rb') as f:
+                file_data = f.read()
+            
+
+            encrypted_data = encryption.encrypt_data(file_data, key)
+            
+           
+            conn.sendall(encryption.pack_length(len(encrypted_data)))
+            time.sleep(0.1)
+            
+          
+            conn.sendall(encrypted_data)
+            print(f"[+] Файл {filename} успешно отправлен пользователю {username}")
+        else:
+            conn.sendall("FILE_NOT_FOUND".encode())
+            print(f"[-] Файл {filename} не найден в хранилище для {username}")
+    except Exception as e:
+        print(f"[-] Ошибка при перессылке файла: {e}")
+
+
 def case_change_info(conn, username, key):
     num = conn.recv(1024).decode()
     time.sleep(1)
@@ -202,6 +259,24 @@ def case_change_info(conn, username, key):
         conn.send("OK".encode())
     else: 
         conn.send("NOK".encode())
+
+
+
+def generate_totp_secret():
+    return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567', k=16))
+
+def verify_totp(secret, intervals_no):
+    ##Генерация 6-значного кода
+    missing_padding = len(secret) % 8
+    if missing_padding:
+        secret += '=' * (8 - missing_padding)
+    key = base64.b32decode(secret, casefold=True)
+    msg = struct.pack(">Q", intervals_no)
+    hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
+    o = hmac_hash[19] & 15
+    token = (struct.unpack(">I", hmac_hash[o:o+4])[0] & 0x7fffffff) % 1000000
+    return f"{token:06d}"
+
 if __name__ == "__main__":
     start_server()
         
