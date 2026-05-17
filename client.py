@@ -36,11 +36,11 @@ def start_client():
             else: 
                 add_useeer(s, key)
                 
-                resp_2fa = s.recv(1024).decode()
+                resp_2fa = encryption.decrypt_data(s.recv(1024), key)
                 if resp_2fa.startswith("REG_2FA:"):
                     secret_key = resp_2fa.split(":", 1)[1]
-                    print("\n" + "="*50)
-                    print("[+] Сгенерирован  ключ 2FA")
+                    print("\n" + "*"*50)
+                    print(f"[+] Сгенерирован  ключ 2FA для{username}")
                     print(f"Ваш секретный код: {secret_key}")
                     print("Добавьте его в Google Authenticator")
                     print("*"*50 + "\n")
@@ -72,8 +72,9 @@ def start_client():
                 3 Сменить пароль
                 4 Изменить данные пользователя
                 5 Вывести весь список доступных вам файлов   
-                6 Скачать файлы с сервера         
-                7 Выйти      
+                6 Скачать файлы с сервера
+                7 Удалить пользователя         
+                8 Выйти      
                     ''')
                     
                     match command:
@@ -94,7 +95,7 @@ def start_client():
                         case "6":
                             download_file(s, key)
 
-                        case "7":
+                        case "8":
                             case_exit(s)
                             break
 

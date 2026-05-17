@@ -25,7 +25,7 @@ def handle_client(conn, addr, key):
             username, pwd = auth_data.split(':')
             if database.authenticate_user(username, pwd):
                 
-                # КРАСИВО: Запрашиваем секрет через метод database.py, без прямого SQL-кода тут
+                
                 otp_secret = database.get_otp_secret(username)
                 
                 if otp_secret:
@@ -33,6 +33,7 @@ def handle_client(conn, addr, key):
                     client_code = encryption.decrypt_data(conn.recv(1024), key).decode()
                     
                     current_interval = int(time.time() // 30)
+                    #На всякий случай если пользователь долго тупил 1,5 минуты на ввод
                     valid_codes = [
                         verify_totp(otp_secret, current_interval),
                         verify_totp(otp_secret, current_interval - 1),
@@ -40,20 +41,20 @@ def handle_client(conn, addr, key):
                     ]
                     
                     if client_code in valid_codes:
-                        print(f"[+] {username} успешно подтвердил сессию кодом 2FA")
-                        conn.sendall("A_OK".encode('utf-8'))
+                        print(f"[+] {username} успешно подтвердил с 2FA")
+                        conn.sendall("A_OK".encode())
                     else:
-                        print(f"[-] {username} провалил проверку 2FA-кода")
+                        print(f"[-] {username} провалил проверку 2FA")
                         conn.sendall("A_FAIL".encode('utf-8'))
                         return
                 else:
-                    conn.sendall("A_OK".encode('utf-8')) 
+                    conn.sendall("A_OK".encode()) 
             else:
                 print(f"[-] Пользователь {username} ввел неверный пароль")
                 conn.sendall("A_FAIL".encode('utf-8'))
                 return
                 
-        # --- СЦЕНАРИЙ РЕГИСТРАЦИИ С ИНИЦИАЛИЗАЦИЕЙ 2FA ---
+       
         else:
             user = encryption.decrypt_data(conn.recv(1024), key).decode()
             pwd = encryption.decrypt_data(conn.recv(1024), key).decode()
@@ -61,20 +62,27 @@ def handle_client(conn, addr, key):
             
             shaurma, recipe, song = info_data.split(':')
             
-            # ЭФФЕКТИВНО: Генерируем новый секрет СРАЗУ до внесения в базу
+           
             otp_secret = generate_totp_secret()
             
-            # Передаем секрет в add_user, сохраняя всё одним махом
+        
             if database.add_user(user, pwd, shaurma, recipe, song, otp_secret):
                 
                 # Отправляем секрет клиенту для привязки в приложении
-                conn.sendall(f"REG_2FA:{otp_secret}".encode())
+                conn.sendall( encryption.encrypt_data(f"REG_2FA:{otp_secret}", key))
+                             
                 
-                # Проверяем, что пользователь успешно настроил приложение
+                # Проверяем успешнуюю настройку в приложении
                 verify_code = encryption.decrypt_data(conn.recv(1024), key).decode()
                 current_interval = int(time.time() // 30)
                 
-                if verify_code == verify_totp(otp_secret, current_interval):
+                valid_codes = [
+                        verify_totp(otp_secret, current_interval),
+                        verify_totp(otp_secret, current_interval - 1),
+                        verify_totp(otp_secret, current_interval + 1)
+                    ]
+                    
+                if verify_code in valid_codes:
                     username = user
                     conn.sendall("AUTH_OK".encode())
                 else:
@@ -265,15 +273,22 @@ def case_change_info(conn, username, key):
 def generate_totp_secret():
     return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567', k=16))
 
+
+#TOTP RFC 6238
 def verify_totp(secret, intervals_no):
-    ##Генерация 6-значного кода
+    ##Генерим  6 значный код
     missing_padding = len(secret) % 8
     if missing_padding:
         secret += '=' * (8 - missing_padding)
+    #нам безразличен регистр декодируем в байты 
     key = base64.b32decode(secret, casefold=True)
+
+    #берет число текущего врем интервала и упаковывает ровнов в 8 байт\
     msg = struct.pack(">Q", intervals_no)
-    hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
-    o = hmac_hash[19] & 15
+    #>Q от старшего к младшему байту unsigned long long
+    hmac_hash = hmac.new(key, msg, hashlib.sha1).digest() #результат в 20байтах
+#динамическое смещение, оставляющие лишь 4 бита последних - число от 0 до 15
+    o = hmac_hash[19] & 15 #берем 19 байт и накладываем на него побитовую маску 0x0F
     token = (struct.unpack(">I", hmac_hash[o:o+4])[0] & 0x7fffffff) % 1000000
     return f"{token:06d}"
 

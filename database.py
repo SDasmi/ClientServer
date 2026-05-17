@@ -53,19 +53,23 @@ def add_user(username: str, pwd: str, shawarma: str, recipe: str, song: str, otp
         conn.close()
 
 def get_otp_secret(username: str) -> str:
-    """Удобный метод для сервера, чтобы быстро узнать секрет пользователя при логине"""
     conn = create_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT otp_secret FROM users WHERE username = ?", (username,))
+
+    cursor.execute("select otp_secret from users where username = ?", (username,))
     row = cursor.fetchone()
+
     conn.close()
+
     return row[0] if row else None
 
 def delete_user_by_username(username: str):
-    """Метод для отката регистрации, если пользователь ввел неверный проверочный код 2FA"""
+   ##Если неправиьный 2FA -> удаляем к черту из бд
     conn = create_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+    
+    cursor.execute("delete from users where username = ?", (username,))
+
     conn.commit()
     conn.close()
 
